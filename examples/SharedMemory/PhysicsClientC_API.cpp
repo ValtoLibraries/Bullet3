@@ -2052,11 +2052,15 @@ B3_SHARED_API int b3GetDynamicsInfo(b3SharedMemoryStatusHandle statusHandle, str
 {
 	const SharedMemoryStatus* status = (const SharedMemoryStatus* ) statusHandle;
 	const b3DynamicsInfo &dynamicsInfo = status->m_dynamicsInfo;
-	btAssert(status->m_type == CMD_GET_DYNAMICS_INFO);
+	btAssert(status->m_type == CMD_GET_DYNAMICS_INFO_COMPLETED);
 	if (status->m_type != CMD_GET_DYNAMICS_INFO_COMPLETED)
 		return false;
 
 	info->m_mass = dynamicsInfo.m_mass;
+	info->m_localInertialDiagonal[0] = dynamicsInfo.m_localInertialDiagonal[0];
+	info->m_localInertialDiagonal[1] = dynamicsInfo.m_localInertialDiagonal[1];
+	info->m_localInertialDiagonal[2] = dynamicsInfo.m_localInertialDiagonal[2];
+
 	info->m_lateralFrictionCoeff = dynamicsInfo.m_lateralFrictionCoeff;
 	return true;
 }
@@ -2087,6 +2091,21 @@ B3_SHARED_API int b3ChangeDynamicsInfoSetMass(b3SharedMemoryCommandHandle comman
 	command->m_updateFlags |= CHANGE_DYNAMICS_INFO_SET_MASS;
 	return 0;
 }
+
+B3_SHARED_API	int b3ChangeDynamicsInfoSetLocalInertiaDiagonal(b3SharedMemoryCommandHandle commandHandle, int bodyUniqueId, int linkIndex, double localInertiaDiagonal[3])
+{
+	struct SharedMemoryCommand* command = (struct SharedMemoryCommand*) commandHandle;
+	b3Assert(command->m_type == CMD_CHANGE_DYNAMICS_INFO);
+	command->m_changeDynamicsInfoArgs.m_bodyUniqueId = bodyUniqueId;
+	command->m_changeDynamicsInfoArgs.m_linkIndex = linkIndex;
+	command->m_changeDynamicsInfoArgs.m_localInertiaDiagonal[0] = localInertiaDiagonal[0];
+	command->m_changeDynamicsInfoArgs.m_localInertiaDiagonal[1] = localInertiaDiagonal[1];
+	command->m_changeDynamicsInfoArgs.m_localInertiaDiagonal[2] = localInertiaDiagonal[2];
+
+	command->m_updateFlags |= CHANGE_DYNAMICS_INFO_SET_LOCAL_INERTIA_DIAGONAL;
+	return 0;
+}
+
 
 B3_SHARED_API int b3ChangeDynamicsInfoSetLateralFriction(b3SharedMemoryCommandHandle commandHandle, int bodyUniqueId, int linkIndex, double lateralFriction)
 {
