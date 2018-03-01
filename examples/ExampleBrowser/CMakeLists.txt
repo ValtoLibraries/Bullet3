@@ -11,7 +11,7 @@ FILE(GLOB GwenGUISupport_HDRS  "GwenGUISupport/*" )
 
 IF (WIN32)
         INCLUDE_DIRECTORIES(
-                ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew
+                ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad
         )
 				ADD_DEFINITIONS(-DGLEW_STATIC)
 ELSE(WIN32)
@@ -21,7 +21,7 @@ ELSE(WIN32)
                 ADD_DEFINITIONS("-DGLEW_INIT_OPENGL11_FUNCTIONS=1")
                 ADD_DEFINITIONS("-DGLEW_STATIC")
                 ADD_DEFINITIONS("-DGLEW_DYNAMIC_LOAD_ALL_GLX_FUNCTIONS=1")
-                INCLUDE_DIRECTORIES( ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew )
+                INCLUDE_DIRECTORIES( ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad )
      		ENDIF(APPLE)
 ENDIF(WIN32)
 
@@ -90,7 +90,7 @@ LINK_LIBRARIES(
 
 IF (WIN32)
 	INCLUDE_DIRECTORIES(
-		${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew
+		${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad
 	)
 	LINK_LIBRARIES(
 		${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY}
@@ -101,11 +101,12 @@ ELSE(WIN32)
                 find_library(COCOA NAMES Cocoa)
                 MESSAGE(${COCOA})
                 link_libraries(${COCOA} ${OPENGL_gl_LIBRARY} ${OPENGL_glu_LIBRARY})
+		INCLUDE_DIRECTORIES( ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad )
   ELSE(APPLE)
 		ADD_DEFINITIONS("-DGLEW_INIT_OPENGL11_FUNCTIONS=1")
 		ADD_DEFINITIONS("-DGLEW_STATIC")
 		ADD_DEFINITIONS("-DGLEW_DYNAMIC_LOAD_ALL_GLX_FUNCTIONS=1")
-		INCLUDE_DIRECTORIES( ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew )
+		INCLUDE_DIRECTORIES( ${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad )
 		LINK_LIBRARIES( pthread ${DL})
 	ENDIF(APPLE)
 ENDIF(WIN32)
@@ -143,11 +144,10 @@ SET(BulletExampleBrowser_SRCS
 	../TinyRenderer/tgaimage.cpp
 	../TinyRenderer/our_gl.cpp
 	../TinyRenderer/TinyRenderer.cpp
-	../SharedMemory/TinyRendererVisualShapeConverter.cpp
-	../SharedMemory/TinyRendererVisualShapeConverter.h
+	../SharedMemory/plugins/tinyRendererPlugin/tinyRendererPlugin.cpp
+	../SharedMemory/plugins/tinyRendererPlugin/TinyRendererVisualShapeConverter.cpp
 	../SharedMemory/IKTrajectoryHelper.cpp
 	../SharedMemory/IKTrajectoryHelper.h
-	
 	../SharedMemory/PhysicsServer.cpp
 	../SharedMemory/PhysicsClientSharedMemory.cpp
 	../SharedMemory/PhysicsClientSharedMemory_C_API.cpp
@@ -176,6 +176,8 @@ SET(BulletExampleBrowser_SRCS
 	../SharedMemory/b3PluginManager.cpp
 	../RobotSimulator/b3RobotSimulatorClientAPI.cpp
 	../RobotSimulator/b3RobotSimulatorClientAPI.h
+	../RobotSimulator/b3RobotSimulatorClientAPI_NoGUI.cpp
+	../RobotSimulator/b3RobotSimulatorClientAPI_NoGUI.h
 	../BasicDemo/BasicExample.cpp
 	../BasicDemo/BasicExample.h
 	../InverseDynamics/InverseDynamicsExample.cpp

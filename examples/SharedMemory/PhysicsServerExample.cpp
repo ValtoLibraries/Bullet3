@@ -135,6 +135,7 @@ enum MultiThreadedGUIHelperCommunicationEnums
 	eGUIHelperChangeGraphicsInstanceTextureId,
 	eGUIHelperGetShapeIndexFromInstance,
 	eGUIHelperChangeTexture,
+	eGUIHelperRemoveTexture,
 };
 
 
@@ -857,6 +858,17 @@ public:
 		rbWorld->setDebugDrawer(m_debugDraw );
 
 		//m_childGuiHelper->createPhysicsDebugDrawer(rbWorld);
+	}
+
+	int m_removeTextureUid;
+
+	virtual void removeTexture(int textureUid)
+	{
+		m_removeTextureUid = textureUid;
+		m_cs->lock();
+		m_cs->setSharedParam(1, eGUIHelperRemoveTexture);
+
+		workerThreadWait();
 	}
 
 	virtual int	registerTexture(const unsigned char* texels, int width, int height)
@@ -1878,6 +1890,13 @@ void	PhysicsServerExample::updateGraphics()
 		m_multiThreadedHelper->mainThreadRelease();
 		break;
 	}
+	case eGUIHelperRemoveTexture:
+	{
+		B3_PROFILE("eGUIHelperRemoveTexture");
+		m_multiThreadedHelper->m_childGuiHelper->removeTexture(m_multiThreadedHelper->m_removeTextureUid);
+		m_multiThreadedHelper->mainThreadRelease();
+		break;
+	}
 	case eGUIHelperRegisterGraphicsShape:
 	{
 		B3_PROFILE("eGUIHelperRegisterGraphicsShape");
@@ -2169,7 +2188,11 @@ void	PhysicsServerExample::updateGraphics()
 															btVector4(32,255,255,255)};
 									if (segmentationMask>=0)
 									{
-										btVector4 rgb = palette[segmentationMask&3];
+										int obIndex = segmentationMask&((1<<24)-1);
+										int linkIndex = (segmentationMask>>24)-1;
+										
+										btVector4 rgb = palette[(obIndex+linkIndex)&3];
+										
 										 m_canvas->setPixel(m_canvasSegMaskIndex,i,j,
 											rgb.x(),
 											rgb.y(),
@@ -2529,23 +2552,23 @@ void PhysicsServerExample::drawUserDebugLines()
 				optionFlag |= CommonGraphicsApp::eDrawText3D_OrtogonalFaceCamera;
 			} else
 			{
-				orientation[0] = m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[0];
-				orientation[1] = m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[1];
-				orientation[2] = m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[2];
-				orientation[3] = m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[3];
+				orientation[0] = (float)m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[0];
+				orientation[1] = (float)m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[1];
+				orientation[2] = (float)m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[2];
+				orientation[3] = (float)m_multiThreadedHelper->m_userDebugText[i].m_textOrientation[3];
 				optionFlag |= CommonGraphicsApp::eDrawText3D_TrueType;
 				
 			}
 			
 			float colorRGBA[4] = {
-				m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[0],
-				m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[1],
-				m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[2],
-				1.};
+				(float)m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[0],
+				(float)m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[1],
+				(float)m_multiThreadedHelper->m_userDebugText[i].m_textColorRGB[2],
+				(float)1.};
 
-			float pos[3] = {m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[0],
-			m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[1],
-			m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[2]};
+			float pos[3] = { (float)m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[0],
+				(float)m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[1],
+				(float)m_multiThreadedHelper->m_userDebugText[i].m_textPositionXYZ1[2]};
 
 			int graphicsIndex = m_multiThreadedHelper->m_userDebugText[i].m_trackingVisualShapeIndex;
 			if (graphicsIndex>=0)
@@ -2600,7 +2623,9 @@ void PhysicsServerExample::drawUserDebugLines()
 					offset.setIdentity();
 					offset.setOrigin(btVector3(0,-float(t)*sz,0));
 					btTransform result = tr*offset;
-					float newpos[3] = {result.getOrigin()[0],result.getOrigin()[1],result.getOrigin()[2]};
+					float newpos[3] = { (float)result.getOrigin()[0],
+						(float)result.getOrigin()[1],
+						(float)result.getOrigin()[2]};
 					
 					m_guiHelper->getAppInterface()->drawText3D(pieces[t].c_str(),
 						newpos,orientation,colorRGBA,

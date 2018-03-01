@@ -49,6 +49,14 @@ struct TinyRendererObjectArray
   btAlignedObjectArray<  TinyRenderObjectData*> m_renderObjects;
   int m_objectUniqueId;
   int m_linkIndex;
+  btTransform m_worldTransform;
+  btVector3 m_localScaling;
+
+  TinyRendererObjectArray()
+  {
+	  m_worldTransform.setIdentity();
+	  m_localScaling.setValue(1,1,1);
+  }
 };
 
 #define START_WIDTH 640
@@ -57,7 +65,7 @@ struct TinyRendererObjectArray
 struct TinyRendererVisualShapeConverterInternalData
 {
 	
-    btHashMap<btHashPtr,TinyRendererObjectArray*> m_swRenderInstances;
+    btHashMap<btHashInt,TinyRendererObjectArray*> m_swRenderInstances;
 
 	btAlignedObjectArray<b3VisualShapeData> m_visualShapes;
     
@@ -82,6 +90,7 @@ struct TinyRendererVisualShapeConverterInternalData
     float m_lightSpecularCoeff;
     bool m_hasLightSpecularCoeff;
     bool m_hasShadow;
+	int m_flags;
 	SimpleCamera m_camera;
 	
 	
@@ -102,7 +111,8 @@ struct TinyRendererVisualShapeConverterInternalData
     m_hasLightDiffuseCoeff(false),
 	m_lightSpecularCoeff(0.05),
     m_hasLightSpecularCoeff(false),
-	m_hasShadow(false)
+	m_hasShadow(false),
+	m_flags(0)
 	{
 	    m_depthBuffer.resize(m_swWidth*m_swHeight);
         m_shadowBuffer.resize(m_swWidth*m_swHeight);
@@ -154,6 +164,11 @@ void TinyRendererVisualShapeConverter::setShadow(bool hasShadow)
 {
     m_data->m_hasShadow = hasShadow;
 }
+void TinyRendererVisualShapeConverter::setFlags(int flags)
+{
+	m_data->m_flags = flags;
+}
+
 
 void TinyRendererVisualShapeConverter::setLightAmbientCoeff(float ambientCoeff)
 {
@@ -463,12 +478,14 @@ void convertURDFToVisualShape(const UrdfShape* visual, const char* urdfPathPrefi
 				vtx.xyzw[1] = pos.y();
 				vtx.xyzw[2] = pos.z();
 				vtx.xyzw[3] = 1.f;
-				pos.normalize();
-				vtx.normal[0] = pos.x();
-				vtx.normal[1] = pos.y();
-				vtx.normal[2] = pos.z();
-				vtx.uv[0] = 0.5f;
-				vtx.uv[1] = 0.5f;
+				btVector3 normal = pos.safeNormalize();
+				vtx.normal[0] = normal.x();
+				vtx.normal[1] = normal.y();
+				vtx.normal[2] = normal.z();
+				btScalar u = btAtan2(normal[0], normal[2]) / (2 * SIMD_PI) + 0.5;
+				btScalar v = normal[1] * 0.5 + 0.5;
+				vtx.uv[0] = u;
+				vtx.uv[1] = v;
 				glmesh->m_vertices->push_back(vtx);
 			}
 
@@ -533,7 +550,7 @@ static btVector4 sColors[4] =
 void TinyRendererVisualShapeConverter::convertVisualShapes(
 	int linkIndex, const char* pathPrefix, const btTransform& localInertiaFrame,
 	const UrdfLink* linkPtr, const UrdfModel* model,
-	class btCollisionObject* colObj, int bodyUniqueId)
+	int collisionObjectUniqueId, int bodyUniqueId)
 {
 	btAssert(linkPtr); // TODO: remove if (not doing it now, because diff will be 50+ lines)
 	if (linkPtr)
@@ -570,36 +587,53 @@ void TinyRendererVisualShapeConverter::convertVisualShapes(
 
 			
 
-			int colorIndex = colObj? colObj->getBroadphaseHandle()->getUid() & 3 : 0;
-
+			int colorIndex = linkIndex;//colObj? colObj->getBroadphaseHandle()->getUid() & 3 : 0;
+			if (colorIndex<0)
+				colorIndex=0;
+			colorIndex &=3;
 			btVector4 color;
 			color = sColors[colorIndex];
 			float rgbaColor[4] = {color[0],color[1],color[2],color[3]};
-			if (colObj->getCollisionShape()->getShapeType()==STATIC_PLANE_PROXYTYPE)
+			//if (colObj->getCollisionShape()->getShapeType()==STATIC_PLANE_PROXYTYPE)
+			//{
+			//	color.setValue(1,1,1,1);
+			//}
+			if (model)
 			{
-				color.setValue(1,1,1,1);
-			}
-			if (model && useVisual)
-			{
-				btHashString matName(linkPtr->m_visualArray[v1].m_materialName.c_str());
-				UrdfMaterial*const* matPtr = model->m_materials[matName];
-				if (matPtr)
+				if (useVisual)
 				{
-					for (int i=0; i<4; i++)
+					btHashString matName(linkPtr->m_visualArray[v1].m_materialName.c_str());
+					UrdfMaterial*const* matPtr = model->m_materials[matName];
+					if (matPtr)
 					{
-						rgbaColor[i] = (*matPtr)->m_matColor.m_rgbaColor[i];
+						for (int i = 0; i < 4; i++)
+						{
+							rgbaColor[i] = (*matPtr)->m_matColor.m_rgbaColor[i];
+						}
+						//printf("UrdfMaterial %s, rgba = %f,%f,%f,%f\n",mat->m_name.c_str(),mat->m_rgbaColor[0],mat->m_rgbaColor[1],mat->m_rgbaColor[2],mat->m_rgbaColor[3]);
+						//m_data->m_linkColors.insert(linkIndex,mat->m_rgbaColor);
 					}
-					//printf("UrdfMaterial %s, rgba = %f,%f,%f,%f\n",mat->m_name.c_str(),mat->m_rgbaColor[0],mat->m_rgbaColor[1],mat->m_rgbaColor[2],mat->m_rgbaColor[3]);
-					//m_data->m_linkColors.insert(linkIndex,mat->m_rgbaColor);
+				}
+				
+			}
+			else
+			{
+
+				if (vis && vis->m_geometry.m_hasLocalMaterial)
+				{
+					for (int i = 0; i < 4; i++)
+					{
+						rgbaColor[i] = vis->m_geometry.m_localMaterial.m_matColor.m_rgbaColor[i];
+					}
 				}
 			}
 			
-			TinyRendererObjectArray** visualsPtr = m_data->m_swRenderInstances[colObj];
+			TinyRendererObjectArray** visualsPtr = m_data->m_swRenderInstances[collisionObjectUniqueId];
             if (visualsPtr==0)
             {
-                m_data->m_swRenderInstances.insert(colObj,new TinyRendererObjectArray);
+                m_data->m_swRenderInstances.insert(collisionObjectUniqueId,new TinyRendererObjectArray);
             }
-            visualsPtr = m_data->m_swRenderInstances[colObj];
+            visualsPtr = m_data->m_swRenderInstances[collisionObjectUniqueId];
 			
             btAssert(visualsPtr);
             TinyRendererObjectArray* visuals = *visualsPtr;
@@ -629,7 +663,7 @@ void TinyRendererVisualShapeConverter::convertVisualShapes(
 
             if (vertices.size() && indices.size())
             {
-                TinyRenderObjectData* tinyObj = new TinyRenderObjectData(m_data->m_rgbColorBuffer,m_data->m_depthBuffer, &m_data->m_shadowBuffer, &m_data->m_segmentationMaskBuffer, bodyUniqueId);
+                TinyRenderObjectData* tinyObj = new TinyRenderObjectData(m_data->m_rgbColorBuffer,m_data->m_depthBuffer, &m_data->m_shadowBuffer, &m_data->m_segmentationMaskBuffer, bodyUniqueId, linkIndex);
 				unsigned char* textureImage1=0;
 				int textureWidth=0;
 				int textureHeight=0;
@@ -720,7 +754,7 @@ int TinyRendererVisualShapeConverter::getVisualShapesData(int bodyUniqueId, int 
 
 
 
-void TinyRendererVisualShapeConverter::changeRGBAColor(int bodyUniqueId, int linkIndex, const double rgbaColor[4])
+void TinyRendererVisualShapeConverter::changeRGBAColor(int bodyUniqueId, int linkIndex, int shapeIndex, const double rgbaColor[4])
 {
     int start = -1;
     for (int i = 0; i < m_data->m_visualShapes.size(); i++)
@@ -745,12 +779,16 @@ void TinyRendererVisualShapeConverter::changeRGBAColor(int bodyUniqueId, int lin
 			{
 				for (int q=0;q<visuals->m_renderObjects.size();q++)
 				{
-					visuals->m_renderObjects[q]->m_model->setColorRGBA(rgba);
+					if (shapeIndex<0 || q==shapeIndex)
+					{
+						visuals->m_renderObjects[q]->m_model->setColorRGBA(rgba);
+					}
 				}
 			}
 		}
 	}
 }
+
 
 
 void TinyRendererVisualShapeConverter::setUpAxis(int axis)
@@ -797,6 +835,19 @@ void TinyRendererVisualShapeConverter::render()
 
 	render(viewMat,projMat);
 }    
+
+
+void TinyRendererVisualShapeConverter::syncTransform(int collisionObjectUniqueId, const btTransform& worldTransform, const btVector3& localScaling)
+{
+	TinyRendererObjectArray** renderObjPtr = m_data->m_swRenderInstances[collisionObjectUniqueId];
+	if (renderObjPtr)
+	{
+		TinyRendererObjectArray* renderObj = *renderObjPtr;
+		renderObj->m_worldTransform = worldTransform;
+		renderObj->m_localScaling = localScaling;
+	}
+}
+
 
 void TinyRendererVisualShapeConverter::render(const float viewMat[16], const float projMat[16]) 
 {
@@ -878,11 +929,6 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
                 continue;//can this ever happen?
             TinyRendererObjectArray* visualArray = *visualArrayPtr;
             
-            btHashPtr colObjHash = m_data->m_swRenderInstances.getKeyAtIndex(n);
-            
-            
-            const btCollisionObject* colObj = (btCollisionObject*) colObjHash.getPointer();
-            
             for (int v=0;v<visualArray->m_renderObjects.size();v++)
             {
                 
@@ -890,7 +936,7 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
                 
                 
                 //sync the object transform
-                const btTransform& tr = colObj->getWorldTransform();
+				const btTransform& tr = visualArray->m_worldTransform;
                 tr.getOpenGLMatrix(modelMat);
                 
                 for (int i=0;i<4;i++)
@@ -903,7 +949,7 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
                         renderObj->m_viewMatrix[i][j] = viewMat[i+4*j];
                     }
                 }
-                renderObj->m_localScaling = colObj->getCollisionShape()->getLocalScaling();
+				renderObj->m_localScaling = visualArray->m_localScaling;
                 renderObj->m_lightDirWorld = lightDirWorld;
                 renderObj->m_lightColor = lightColor;
                 renderObj->m_lightDistance = lightDistance;
@@ -922,10 +968,6 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
             continue;//can this ever happen?
         TinyRendererObjectArray* visualArray = *visualArrayPtr;
         
-        btHashPtr colObjHash = m_data->m_swRenderInstances.getKeyAtIndex(n);
-        
-        
-        const btCollisionObject* colObj = (btCollisionObject*) colObjHash.getPointer();
         
         for (int v=0;v<visualArray->m_renderObjects.size();v++)
         {
@@ -934,7 +976,7 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
             
             
             //sync the object transform
-            const btTransform& tr = colObj->getWorldTransform();
+			const btTransform& tr = visualArray->m_worldTransform;
             tr.getOpenGLMatrix(modelMat);
             
             for (int i=0;i<4;i++)
@@ -947,7 +989,7 @@ void TinyRendererVisualShapeConverter::render(const float viewMat[16], const flo
                     renderObj->m_viewMatrix[i][j] = viewMat[i+4*j];
                 }
             }
-            renderObj->m_localScaling = colObj->getCollisionShape()->getLocalScaling();
+			renderObj->m_localScaling = visualArray->m_localScaling;
             renderObj->m_lightDirWorld = lightDirWorld;
             renderObj->m_lightColor = lightColor;
             renderObj->m_lightDistance = lightDistance;
@@ -1043,7 +1085,17 @@ void TinyRendererVisualShapeConverter::copyCameraImageData(unsigned char* pixels
 			}
 			if (segmentationMaskBuffer)
             {
-                segmentationMaskBuffer[i] = m_data->m_segmentationMaskBuffer[i+startPixelIndex];
+				int segMask = m_data->m_segmentationMaskBuffer[i + startPixelIndex];
+				if ((m_data->m_flags & ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX)==0)
+				{
+					//if we don't explicitly request link index, clear it out
+					//object index are the lower 24bits
+					if (segMask >= 0)
+					{
+						segMask &= ((1 << 24) - 1);
+					}
+				}
+				segmentationMaskBuffer[i] = segMask;
             }
 			
             if (pixelsRGBA)
@@ -1062,9 +1114,9 @@ void TinyRendererVisualShapeConverter::copyCameraImageData(unsigned char* pixels
     }    
 }
 
-void TinyRendererVisualShapeConverter::removeVisualShape(class btCollisionObject* colObj)
+void TinyRendererVisualShapeConverter::removeVisualShape(int collisionObjectUniqueId)
 {
-	TinyRendererObjectArray** ptrptr = m_data->m_swRenderInstances[colObj];
+	TinyRendererObjectArray** ptrptr = m_data->m_swRenderInstances[collisionObjectUniqueId];
 	if (ptrptr && *ptrptr)
 	{
 		TinyRendererObjectArray* ptr = *ptrptr;
@@ -1076,7 +1128,7 @@ void TinyRendererVisualShapeConverter::removeVisualShape(class btCollisionObject
 			}
 		}
 		delete ptr;
-		m_data->m_swRenderInstances.remove(colObj);
+		m_data->m_swRenderInstances.remove(collisionObjectUniqueId);
 	}
 }
 
@@ -1113,7 +1165,7 @@ void TinyRendererVisualShapeConverter::resetAll()
 }
 
 
-void TinyRendererVisualShapeConverter::activateShapeTexture(int objectUniqueId, int jointIndex, int shapeIndex, int textureUniqueId)
+void TinyRendererVisualShapeConverter::changeShapeTexture(int objectUniqueId, int jointIndex, int shapeIndex, int textureUniqueId)
 {
 	btAssert(textureUniqueId < m_data->m_textures.size());
 	if (textureUniqueId >= 0 && textureUniqueId < m_data->m_textures.size())

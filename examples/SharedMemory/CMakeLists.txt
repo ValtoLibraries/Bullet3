@@ -36,9 +36,9 @@ SET(SharedMemory_SRCS
 	SharedMemoryCommandProcessor.h
 	PhysicsServerCommandProcessor.cpp
 	PhysicsServerCommandProcessor.h
-	TinyRendererVisualShapeConverter.cpp
-	TinyRendererVisualShapeConverter.h
-	SharedMemoryCommands.h
+	plugins/tinyRendererPlugin/tinyRendererPlugin.cpp
+	plugins/tinyRendererPlugin/TinyRendererVisualShapeConverter.cpp
+SharedMemoryCommands.h
 	SharedMemoryPublic.h
 	b3PluginManager.cpp
 	../TinyRenderer/geometry.cpp
@@ -92,13 +92,14 @@ INCLUDE_DIRECTORIES(
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs
 )
 
+IF (USE_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD)
+	LINK_LIBRARIES(BulletSoftBody)
+ENDIF()
+
 LINK_LIBRARIES(
  Bullet3Common BulletWorldImporter BulletFileLoader BulletInverseDynamicsUtils BulletInverseDynamics BulletDynamics BulletCollision LinearMath BussIK
 )
 
-IF (USE_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD)
-	LINK_LIBRARIES(BulletSoftBody)
-ENDIF()
 
 IF (WIN32)
         ADD_EXECUTABLE(App_PhysicsServer_SharedMemory
@@ -143,13 +144,13 @@ ENDIF(INTERNAL_ADD_POSTFIX_EXECUTABLE_NAMES)
 INCLUDE_DIRECTORIES(
 	${BULLET_PHYSICS_SOURCE_DIR}/src
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs
-	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew
+	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad
 )
 
 ADD_DEFINITIONS(-DB3_USE_STANDALONE_EXAMPLE)
 
 LINK_LIBRARIES(
- Bullet3Common BulletWorldImporter BulletInverseDynamicsUtils BulletInverseDynamics BulletDynamics BulletCollision LinearMath BussIK OpenGLWindow
+	BulletSoftBody Bullet3Common BulletWorldImporter BulletInverseDynamicsUtils BulletInverseDynamics BulletDynamics BulletCollision LinearMath BussIK OpenGLWindow
 )
 
 
@@ -219,7 +220,7 @@ IF (WIN32 OR APPLE)
 INCLUDE_DIRECTORIES(
 	${BULLET_PHYSICS_SOURCE_DIR}/src
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs
-	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/Glew
+	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/glad
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/openvr/headers
 	${BULLET_PHYSICS_SOURCE_DIR}/examples/ThirdPartyLibs/openvr/samples/shared
 )
