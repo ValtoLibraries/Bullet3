@@ -43,6 +43,7 @@
 #include "../Utils/b3Clock.h"
 #include "b3PluginManager.h"
 #include "../Extras/Serialize/BulletFileLoader/btBulletFile.h"
+#include "BulletCollision/NarrowPhaseCollision/btRaycastCallback.h"
 
 
 #ifdef STATIC_LINK_VR_PLUGIN
@@ -68,8 +69,6 @@
 #else
 #include "BulletDynamics/Featherstone/btMultiBodyDynamicsWorld.h"
 #endif
-
-
 
 int gInternalSimFlags = 0;
 bool gResetSimulation = 0;
@@ -151,16 +150,16 @@ struct InternalVisualShapeData
 	int m_tinyRendererVisualShapeIndex;
 	int m_OpenGLGraphicsIndex;
 
-	UrdfVisual m_visualShape;
-	btTransform m_localInertiaFrame;
-	std::string m_pathPrefix;
+	b3AlignedObjectArray<UrdfVisual> m_visualShapes;
+	
+	b3AlignedObjectArray<std::string> m_pathPrefixes;
 
 	void clear()
 	{
-		m_tinyRendererVisualShapeIndex = 0;
-		m_OpenGLGraphicsIndex = 0;
-		m_localInertiaFrame.setIdentity();
-		m_pathPrefix = "";
+		m_tinyRendererVisualShapeIndex = -1;
+		m_OpenGLGraphicsIndex = -1;
+		m_visualShapes.clear();
+		m_pathPrefixes.clear();
 	}
 };
 
@@ -1922,10 +1921,13 @@ struct ProgrammaticUrdfInterface : public URDFImporterInterface
 			const InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]);
 			if (visHandle)
 			{
-				if (visHandle->m_visualShape.m_geometry.m_hasLocalMaterial)
+				for (int i=0;i<visHandle->m_visualShapes.size();i++)
 				{
-					matCol = visHandle->m_visualShape.m_geometry.m_localMaterial.m_matColor;
-					return true;
+					if (visHandle->m_visualShapes[i].m_geometry.m_hasLocalMaterial)
+					{
+						matCol = visHandle->m_visualShapes[i].m_geometry.m_localMaterial.m_matColor;
+						return true;
+					}
 				}
 			}
 		}
@@ -2093,39 +2095,91 @@ struct ProgrammaticUrdfInterface : public URDFImporterInterface
 		b3Assert(0);
 	}
 
-	///quick hack: need to rethink the API/dependencies of this
-    virtual int convertLinkVisualShapes(int linkIndex, const char* pathPrefix, const btTransform& inertialFrame) const
+	virtual int convertLinkVisualShapes(int linkIndex, const char* pathPrefix, const btTransform& localInertiaFrame) const
 	{
+		int graphicsIndex = -1;
+		double globalScaling = 1.f;//todo!
+		int flags=0;
+		BulletURDFImporter u2b(m_data->m_guiHelper, m_data->m_pluginManager.getRenderInterface(), globalScaling, flags);
+		u2b.setEnableTinyRenderer(m_data->m_enableTinyRenderer);
+		
+		btAlignedObjectArray<GLInstanceVertex> vertices;
+		btAlignedObjectArray<int> indices;
+		btTransform startTrans; startTrans.setIdentity();
+		btAlignedObjectArray<BulletURDFTexture> textures;
+
 		if (m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]>=0)
 		{
-			const InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]);
+			InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]);
 			if (visHandle)
 			{
-				
-				return visHandle->m_OpenGLGraphicsIndex;
+				if (visHandle->m_OpenGLGraphicsIndex>=0)
+				{
+					//instancing. assume the inertial frame is identical
+					graphicsIndex = visHandle->m_OpenGLGraphicsIndex;
+				} else
+				{
+					for (int v = 0;v<visHandle->m_visualShapes.size();v++)
+					{
+						u2b.convertURDFToVisualShapeInternal(&visHandle->m_visualShapes[v], pathPrefix, localInertiaFrame.inverse()*visHandle->m_visualShapes[v].m_linkLocalFrame, vertices, indices, textures);
+					}
+			
+					if (vertices.size() && indices.size())
+					{
+						if (1)
+						{
+							int textureIndex = -1;
+							if (textures.size())
+							{
+
+								textureIndex = m_data->m_guiHelper->registerTexture(textures[0].textureData1, textures[0].m_width, textures[0].m_height);
+							}
+						
+							{
+								B3_PROFILE("registerGraphicsShape");
+								graphicsIndex = m_data->m_guiHelper->registerGraphicsShape(&vertices[0].xyzw[0], vertices.size(), &indices[0], indices.size(), B3_GL_TRIANGLES, textureIndex);
+								visHandle->m_OpenGLGraphicsIndex = graphicsIndex;
+							}
+						}
+					}
+				}
 			}
+
 		}
-		return -1;
+		return graphicsIndex;
 	}
     
     virtual void convertLinkVisualShapes2(int linkIndex, int urdfIndex, const char* pathPrefix, const btTransform& localInertiaFrame, class btCollisionObject* colObj, int bodyUniqueId) const  
 	{
 		//if there is a visual, use it, otherwise convert collision shape back into UrdfCollision...
 
-		
-
-
 		UrdfModel model;// = m_data->m_urdfParser.getModel();
 		UrdfLink link;
-		int colShapeUniqueId = m_createBodyArgs.m_linkCollisionShapeUniqueIds[urdfIndex];
-		if (colShapeUniqueId>=0)
+
+		if (m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]>=0)
 		{
-			InternalCollisionShapeHandle* handle = m_data->m_userCollisionShapeHandles.getHandle(colShapeUniqueId);
-			if (handle)
+			const InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]);
+			if (visHandle)
 			{
-				for (int i=0;i<handle->m_urdfCollisionObjects.size();i++)
+				for (int i=0;i<visHandle->m_visualShapes.size();i++)
 				{
-					link.m_collisionArray.push_back(handle->m_urdfCollisionObjects[i]);
+					link.m_visualArray.push_back(visHandle->m_visualShapes[i]);
+				}
+			}
+		}
+
+		if (link.m_visualArray.size()==0)
+		{
+			int colShapeUniqueId = m_createBodyArgs.m_linkCollisionShapeUniqueIds[urdfIndex];
+			if (colShapeUniqueId>=0)
+			{
+				InternalCollisionShapeHandle* handle = m_data->m_userCollisionShapeHandles.getHandle(colShapeUniqueId);
+				if (handle)
+				{
+					for (int i=0;i<handle->m_urdfCollisionObjects.size();i++)
+					{
+						link.m_collisionArray.push_back(handle->m_urdfCollisionObjects[i]);
+					}
 				}
 			}
 		}
@@ -3155,6 +3209,8 @@ bool PhysicsServerCommandProcessor::processRequestCameraImageCommand(const struc
 		serverStatusOut.m_numDataStreamBytes = numRequestedPixels * totalBytesPerPixel;
 		float viewMat[16];
 		float projMat[16];
+		float projTextureViewMat[16];
+		float projTextureProjMat[16];
 		for (int i=0;i<16;i++)
 		{
 			viewMat[i] = clientCmd.m_requestPixelDataArguments.m_viewMatrix[i];
@@ -3184,11 +3240,36 @@ bool PhysicsServerCommandProcessor::processRequestCameraImageCommand(const struc
 					projMat[i] = tmpCamResult.m_projectionMatrix[i];
 				}
 			}
-			}
+		}
 		bool handled = false;
                         
 		if ((clientCmd.m_updateFlags & ER_BULLET_HARDWARE_OPENGL)!=0)
 		{
+			if ((flags & ER_USE_PROJECTIVE_TEXTURE) != 0)
+			{
+				this->m_data->m_guiHelper->setProjectiveTexture(true);
+				if ((clientCmd.m_updateFlags & REQUEST_PIXEL_ARGS_HAS_PROJECTIVE_TEXTURE_MATRICES)!=0)
+				{
+					for (int i=0;i<16;i++)
+					{
+						projTextureViewMat[i] = clientCmd.m_requestPixelDataArguments.m_projectiveTextureViewMatrix[i];
+						projTextureProjMat[i] = clientCmd.m_requestPixelDataArguments.m_projectiveTextureProjectionMatrix[i];
+					}
+				}
+				else // If no specified matrices for projective texture, then use the camera matrices.
+				{
+					for (int i=0;i<16;i++)
+					{
+						projTextureViewMat[i] = viewMat[i];
+						projTextureProjMat[i] = projMat[i];
+					}
+				}
+				this->m_data->m_guiHelper->setProjectiveTextureMatrices(projTextureViewMat, projTextureProjMat);
+			}
+			else
+			{
+				this->m_data->m_guiHelper->setProjectiveTexture(false);
+			}
 
 			m_data->m_guiHelper->copyCameraImageData(viewMat,
 								projMat,pixelRGBA,numRequestedPixels,
@@ -3942,14 +4023,16 @@ bool PhysicsServerCommandProcessor::processCreateVisualShapeCommand(const struct
 	u2b.setEnableTinyRenderer(m_data->m_enableTinyRenderer);
 	btTransform localInertiaFrame;
 	localInertiaFrame.setIdentity();
-	btTransform childTrans;
-	childTrans.setIdentity();
+	
 	const char* pathPrefix = "";
-	if (clientCmd.m_createUserShapeArgs.m_numUserShapes == 1)
+	int visualShapeUniqueId = -1;
+	
+	
+    UrdfVisual visualShape;	
+	for (int userShapeIndex = 0; userShapeIndex< clientCmd.m_createUserShapeArgs.m_numUserShapes; userShapeIndex++)
 	{
-		int userShapeIndex = 0;
-
-		UrdfVisual visualShape;
+		btTransform childTrans;
+		childTrans.setIdentity();
 		visualShape.m_geometry.m_type = (UrdfGeomTypes)clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_type;
 		char relativeFileName[1024];
 		char pathPrefix[1024];
@@ -3959,97 +4042,95 @@ bool PhysicsServerCommandProcessor::processCreateVisualShapeCommand(const struct
 
 		switch (visualShape.m_geometry.m_type)
 		{
-			case URDF_GEOM_CYLINDER:
+		case URDF_GEOM_CYLINDER:
+		{
+			visualShape.m_geometry.m_capsuleHeight = visShape.m_capsuleHeight;
+			visualShape.m_geometry.m_capsuleRadius = visShape.m_capsuleRadius;
+			break;
+		}
+		case URDF_GEOM_BOX:
+		{
+			visualShape.m_geometry.m_boxSize.setValue(2.*visShape.m_boxHalfExtents[0],
+				2.*visShape.m_boxHalfExtents[1],
+				2.*visShape.m_boxHalfExtents[2]);
+			break;
+		}
+		case URDF_GEOM_SPHERE:
+		{
+			visualShape.m_geometry.m_sphereRadius = visShape.m_sphereRadius;
+			break;
+
+		}
+		case URDF_GEOM_CAPSULE:
+		{
+			visualShape.m_geometry.m_hasFromTo = visShape.m_hasFromTo;
+			if (visualShape.m_geometry.m_hasFromTo)
+			{
+				visualShape.m_geometry.m_capsuleFrom.setValue(visShape.m_capsuleFrom[0],
+					visShape.m_capsuleFrom[1],
+					visShape.m_capsuleFrom[2]);
+				visualShape.m_geometry.m_capsuleTo.setValue(visShape.m_capsuleTo[0],
+					visShape.m_capsuleTo[1],
+					visShape.m_capsuleTo[2]);
+			}
+			else
 			{
 				visualShape.m_geometry.m_capsuleHeight = visShape.m_capsuleHeight;
 				visualShape.m_geometry.m_capsuleRadius = visShape.m_capsuleRadius;
-				break;
 			}
-			case URDF_GEOM_BOX:
+			break;
+		}
+		case URDF_GEOM_MESH:
+		{
+
+			std::string fileName = clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshFileName;
+			const std::string& error_message_prefix = "";
+			std::string out_found_filename;
+			int out_type;
+			if (b3ResourcePath::findResourcePath(fileName.c_str(), relativeFileName, 1024))
 			{
-				visualShape.m_geometry.m_boxSize.setValue(2.*visShape.m_boxHalfExtents[0],
-					2.*visShape.m_boxHalfExtents[1],
-					2.*visShape.m_boxHalfExtents[2]);
-				break;
-			}
-			case URDF_GEOM_SPHERE:
-			{
-				visualShape.m_geometry.m_sphereRadius = visShape.m_sphereRadius;
-				break;
-
-			}
-			case URDF_GEOM_CAPSULE:
-			{
-				visualShape.m_geometry.m_hasFromTo = visShape.m_hasFromTo;
-				if (visualShape.m_geometry.m_hasFromTo)
-				{
-					visualShape.m_geometry.m_capsuleFrom.setValue(visShape.m_capsuleFrom[0],
-						visShape.m_capsuleFrom[1],
-						visShape.m_capsuleFrom[2]);				
-					visualShape.m_geometry.m_capsuleTo.setValue(visShape.m_capsuleTo[0],
-						visShape.m_capsuleTo[1],
-						visShape.m_capsuleTo[2]);
-				}
-				else
-				{
-					visualShape.m_geometry.m_capsuleHeight = visShape.m_capsuleHeight;
-					visualShape.m_geometry.m_capsuleRadius = visShape.m_capsuleRadius;
-				}
-				break;
-			}
-			case URDF_GEOM_MESH:
-			{
-
-				std::string fileName = clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshFileName;
-				const std::string& error_message_prefix = "";
-				std::string out_found_filename;
-				int out_type;
-				if (b3ResourcePath::findResourcePath(fileName.c_str(), relativeFileName, 1024))
-				{
-					b3FileUtils::extractPath(relativeFileName, pathPrefix, 1024);
-				}
-
-				bool foundFile = findExistingMeshFile(pathPrefix, relativeFileName, error_message_prefix, &out_found_filename, &out_type);
-				visualShape.m_geometry.m_meshFileType = out_type;
-				visualShape.m_geometry.m_meshFileName = fileName;
-
-				visualShape.m_geometry.m_meshScale.setValue(clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[0],
-					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[1],
-					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[2]);
-				break;
-
+				b3FileUtils::extractPath(relativeFileName, pathPrefix, 1024);
 			}
 
-			default:
-			{
-			}
+			bool foundFile = findExistingMeshFile(pathPrefix, relativeFileName, error_message_prefix, &out_found_filename, &out_type);
+			visualShape.m_geometry.m_meshFileType = out_type;
+			visualShape.m_geometry.m_meshFileName = fileName;
+
+			visualShape.m_geometry.m_meshScale.setValue(clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[0],
+				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[1],
+				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_meshScale[2]);
+			break;
+
+		}
+
+		default:
+		{
+		}
 		};
 		visualShape.m_name = "in_memory";
-		visualShape.m_materialName="";
-		visualShape.m_sourceFileLocation="in_memory_unknown_line";
+		visualShape.m_materialName = "";
+		visualShape.m_sourceFileLocation = "in_memory_unknown_line";
 		visualShape.m_linkLocalFrame.setIdentity();
 		visualShape.m_geometry.m_hasLocalMaterial = false;
-							
-							
-		btAlignedObjectArray<GLInstanceVertex> vertices;
-		btAlignedObjectArray<int> indices;
-		btTransform startTrans; startTrans.setIdentity();
-		btAlignedObjectArray<BulletURDFTexture> textures;
-		bool hasRGBA = (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_visualFlags&GEOM_VISUAL_HAS_RGBA_COLOR)!=0;;
-		bool hasSpecular = (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_visualFlags&GEOM_VISUAL_HAS_SPECULAR_COLOR)!=0;;
-		visualShape.m_geometry.m_hasLocalMaterial = hasRGBA|hasSpecular;
+
+
+
+		bool hasRGBA = (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_visualFlags&GEOM_VISUAL_HAS_RGBA_COLOR) != 0;;
+		bool hasSpecular = (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_visualFlags&GEOM_VISUAL_HAS_SPECULAR_COLOR) != 0;;
+		visualShape.m_geometry.m_hasLocalMaterial = hasRGBA | hasSpecular;
 		if (visualShape.m_geometry.m_hasLocalMaterial)
 		{
 			if (hasRGBA)
 			{
-			visualShape.m_geometry.m_localMaterial.m_matColor.m_rgbaColor.setValue(
-				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[0],
-				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[1],
-				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[2],
-				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[3]);
-			} else
+				visualShape.m_geometry.m_localMaterial.m_matColor.m_rgbaColor.setValue(
+					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[0],
+					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[1],
+					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[2],
+					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_rgbaColor[3]);
+			}
+			else
 			{
-									
+
 			}
 			if (hasSpecular)
 			{
@@ -4057,13 +4138,14 @@ bool PhysicsServerCommandProcessor::processCreateVisualShapeCommand(const struct
 					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_specularColor[0],
 					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_specularColor[1],
 					clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_specularColor[2]);
-			} else
+			}
+			else
 			{
-				visualShape.m_geometry.m_localMaterial.m_matColor.m_specularColor.setValue(0.4,0.4,0.4);
+				visualShape.m_geometry.m_localMaterial.m_matColor.m_specularColor.setValue(0.4, 0.4, 0.4);
 			}
 		}
-							
-		if (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_hasChildTransform !=0)
+
+		if (clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_hasChildTransform != 0)
 		{
 			childTrans.setOrigin(btVector3(clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_childPosition[0],
 				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_childPosition[1],
@@ -4075,42 +4157,26 @@ bool PhysicsServerCommandProcessor::processCreateVisualShapeCommand(const struct
 				clientCmd.m_createUserShapeArgs.m_shapes[userShapeIndex].m_childOrientation[3]));
 		}
 
-							
-		u2b.convertURDFToVisualShapeInternal(&visualShape, pathPrefix, localInertiaFrame.inverse()*childTrans, vertices, indices,textures);
-					
-		if (vertices.size() && indices.size())
-		{
-			if (1)
-			{
-				int textureIndex = -1;
-				if (textures.size())
-				{
-				
-					textureIndex = m_data->m_guiHelper->registerTexture(textures[0].textureData1,textures[0].m_width,textures[0].m_height);
-				}
-				int graphicsIndex = -1;
-				{
-					B3_PROFILE("registerGraphicsShape");
-					graphicsIndex = m_data->m_guiHelper->registerGraphicsShape(&vertices[0].xyzw[0], vertices.size(), &indices[0], indices.size(), B3_GL_TRIANGLES, textureIndex);
-					if (graphicsIndex>=0)
-					{
-						int visualShapeUniqueId = m_data->m_userVisualShapeHandles.allocHandle();
-						InternalVisualShapeHandle* visualHandle = m_data->m_userVisualShapeHandles.getHandle(visualShapeUniqueId);
-						visualHandle->m_OpenGLGraphicsIndex = graphicsIndex;
-						visualHandle->m_tinyRendererVisualShapeIndex = -1;
-						//tinyrenderer doesn't separate shape versus instance, so create it when creating the multibody instance
-						//store needed info for tinyrenderer
-						visualHandle->m_localInertiaFrame = localInertiaFrame;
-						visualHandle->m_visualShape = visualShape;
-						visualHandle->m_pathPrefix = pathPrefix[0] ? pathPrefix : "";
 
-						serverStatusOut.m_createUserShapeResultArgs.m_userShapeUniqueId = visualShapeUniqueId;
-						serverStatusOut.m_type = CMD_CREATE_VISUAL_SHAPE_COMPLETED;
-					}
-				}
-			}
+		if (visualShapeUniqueId<0)
+		{
+			visualShapeUniqueId = m_data->m_userVisualShapeHandles.allocHandle();
 		}
+		InternalVisualShapeHandle* visualHandle = m_data->m_userVisualShapeHandles.getHandle(visualShapeUniqueId);
+		visualHandle->m_OpenGLGraphicsIndex = -1;
+		visualHandle->m_tinyRendererVisualShapeIndex = -1;
+		//tinyrenderer doesn't separate shape versus instance, so create it when creating the multibody instance
+		//store needed info for tinyrenderer
+		
+		visualShape.m_linkLocalFrame = childTrans;
+		visualHandle->m_visualShapes.push_back(visualShape);
+		visualHandle->m_pathPrefixes.push_back(pathPrefix[0] ? pathPrefix : "");
+		
+		serverStatusOut.m_createUserShapeResultArgs.m_userShapeUniqueId = visualShapeUniqueId;
+		serverStatusOut.m_type = CMD_CREATE_VISUAL_SHAPE_COMPLETED;
+
 	}
+
 	return hasStatus;
 }
 
@@ -4472,6 +4538,8 @@ bool PhysicsServerCommandProcessor::processRequestRaycastIntersectionsCommand(co
 			clientCmd.m_requestRaycastIntersections.m_rayToPositions[ray][2]);
 
 		btCollisionWorld::ClosestRayResultCallback rayResultCallback(rayFromWorld,rayToWorld);
+		rayResultCallback.m_flags |= btTriangleRaycastCallback::kF_UseGjkConvexCastRaytest;
+
 		m_data->m_dynamicsWorld->rayTest(rayFromWorld,rayToWorld,rayResultCallback);
 		int rayHits = serverStatusOut.m_raycastHits.m_numRaycastHits;
 
@@ -6080,7 +6148,7 @@ bool PhysicsServerCommandProcessor::processRequestCollisionInfoCommand(const str
 		for (int l=0;l<mb->getNumLinks();l++)
 		{
 			serverCmd.m_sendCollisionInfoArgs.m_linkWorldAABBsMin[3*l+0] = 0;
-			serverCmd.m_sendCollisionInfoArgs.m_linkWorldAABBsMin[3*l+1] = 0;
+			serverCmd.m_sendCollisionInfoArgs.m_linkWorldAABBsMin[3*l+1] = 0;																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																																												
 			serverCmd.m_sendCollisionInfoArgs.m_linkWorldAABBsMin[3*l+2] = 0;
 
 			serverCmd.m_sendCollisionInfoArgs.m_linkWorldAABBsMax[3*l+0] = -1;
@@ -8668,7 +8736,7 @@ bool PhysicsServerCommandProcessor::processLoadTextureCommand(const struct Share
 			int uid = -1;
 			if (m_data->m_pluginManager.getRenderInterface())
 			{
-				m_data->m_pluginManager.getRenderInterface()->loadTextureFile(relativeFileName);
+				uid = m_data->m_pluginManager.getRenderInterface()->loadTextureFile(relativeFileName);
 			}
 			if(uid>=0)
 			{
