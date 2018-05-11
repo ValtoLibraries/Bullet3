@@ -116,6 +116,7 @@ class MinitaurFourLegStandEnv(minitaur_gym_env.MinitaurGymEnv):
         on_rack=on_rack,
         render=render,
         env_randomizer=env_randomizer,
+        reflection = False,
         log_path=log_path)
 
     action_dim = 4
@@ -196,6 +197,8 @@ class MinitaurFourLegStandEnv(minitaur_gym_env.MinitaurGymEnv):
     t = float(float(t) / float(MOVING_FLOOR_TOTAL_STEP))
     ori = map(operator.add, [x * (1.0 - t) for x in self._cur_ori],
               [x * t for x in self._goal_ori])
+    ori=list(ori)
+    print("ori=",ori)
     self._pybullet_client.resetBasePositionAndOrientation(0, [0, 0, 0], ori)
     if self._env_step_counter % PERTURBATION_TOTAL_STEP == 0:
       self._perturbation_magnitude = random.uniform(0.0, 0.0)
@@ -213,7 +216,7 @@ class MinitaurFourLegStandEnv(minitaur_gym_env.MinitaurGymEnv):
     self._env_step_counter += 1
     done = self._termination()
     obs = self._get_true_observation()
-    reward = self._reward(action, obs)
+    reward = self._reward()
     if self._log_path is not None:
       minitaur_logging.update_episode_proto(self._episode_proto, self.minitaur,
                                             action, self._env_step_counter)
@@ -269,7 +272,7 @@ class MinitaurFourLegStandEnv(minitaur_gym_env.MinitaurGymEnv):
         np.asarray([0, 0, 1]), np.asarray(local_up))
     return local_global_up_dot_product < 0.85 or height < 0.15
 
-  def _reward(self, action, obs):
+  def _reward(self):
     roll, pitch, _ = self.minitaur.GetBaseRollPitchYaw()
     return 1.0 / (0.001 + math.fabs(roll) + math.fabs(pitch))
 

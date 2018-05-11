@@ -482,10 +482,10 @@ struct CommandLogPlayback
 		SharedMemoryCommand unused;
 #endif//BACKWARD_COMPAT
 		bool result = false;
-
+		size_t s = 0;
 		if (m_file)
 		{
-			size_t s = 0;
+			
 			int commandType = -1;
 
 			if (m_fileIs64bit)
@@ -518,8 +518,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT
 					cmd->m_mjcfArguments = unused.m_mjcfArguments;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_mjcfArguments,sizeof(MjcfArgs),1,m_file);
+					s=fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					s = fread(&cmd->m_mjcfArguments,sizeof(MjcfArgs),1,m_file);
 #endif
 					result=true;
 					break;
@@ -529,8 +529,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT
 					cmd->m_sdfRequestInfoArgs = unused.m_sdfRequestInfoArgs;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_sdfRequestInfoArgs,sizeof(SdfRequestInfoArgs),1,m_file);					
+					s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					s = fread(&cmd->m_sdfRequestInfoArgs,sizeof(SdfRequestInfoArgs),1,m_file);
 #endif
 					result=true;
 					break;
@@ -540,8 +540,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT
 					cmd->m_requestVisualShapeDataArguments = unused.m_requestVisualShapeDataArguments;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_requestVisualShapeDataArguments,sizeof(RequestVisualShapeDataArgs),1,m_file);					
+					s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					s = fread(&cmd->m_requestVisualShapeDataArguments,sizeof(RequestVisualShapeDataArgs),1,m_file);
 #endif
 					result=true;
 					break;
@@ -551,8 +551,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT
 					 cmd->m_urdfArguments = unused.m_urdfArguments;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_urdfArguments,sizeof(UrdfArgs),1,m_file);					
+					 s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					 s = fread(&cmd->m_urdfArguments,sizeof(UrdfArgs),1,m_file);
 #endif
 					result=true;
 					break;
@@ -562,8 +562,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT
 					 cmd->m_initPoseArgs = unused.m_initPoseArgs;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_initPoseArgs,sizeof(InitPoseArgs),1,m_file);					
+					 s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					 s = fread(&cmd->m_initPoseArgs,sizeof(InitPoseArgs),1,m_file);
 
 #endif
 					 result=true;
@@ -574,8 +574,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT					 
 					cmd->m_requestActualStateInformationCommandArgument = unused.m_requestActualStateInformationCommandArgument;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_requestActualStateInformationCommandArgument,sizeof(RequestActualStateArgs),1,m_file);					
+					 s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					 s = fread(&cmd->m_requestActualStateInformationCommandArgument,sizeof(RequestActualStateArgs),1,m_file);
 #endif
 					 result=true;
 					break;
@@ -585,8 +585,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT	
 					 cmd->m_sendDesiredStateCommandArgument = unused.m_sendDesiredStateCommandArgument;
 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_sendDesiredStateCommandArgument ,sizeof(SendDesiredStateArgs),1,m_file);					
+					 s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					 s = fread(&cmd->m_sendDesiredStateCommandArgument ,sizeof(SendDesiredStateArgs),1,m_file);
 
 #endif
 					 result = true;
@@ -597,8 +597,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT	
 					 cmd->m_physSimParamArgs = unused.m_physSimParamArgs;
 					 #else
-					fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_physSimParamArgs ,sizeof(b3PhysicsSimulationParameters),1,m_file);					
+					s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					s = fread(&cmd->m_physSimParamArgs ,sizeof(b3PhysicsSimulationParameters),1,m_file);
 
 					 #endif
 					 result = true;
@@ -609,8 +609,8 @@ struct CommandLogPlayback
 #ifdef BACKWARD_COMPAT	
 					 cmd->m_requestContactPointArguments = unused.m_requestContactPointArguments;
 					 #else
-					 fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
-					fread(&cmd->m_requestContactPointArguments ,sizeof(RequestContactDataArgs),1,m_file);					
+					 s = fread(&cmd->m_updateFlags,sizeof(int),1,m_file);
+					 s = fread(&cmd->m_requestContactPointArguments ,sizeof(RequestContactDataArgs),1,m_file);
 
 					 #endif
 					 result = true;
@@ -2156,9 +2156,9 @@ struct ProgrammaticUrdfInterface : public URDFImporterInterface
 		UrdfModel model;// = m_data->m_urdfParser.getModel();
 		UrdfLink link;
 
-		if (m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]>=0)
+		if (m_createBodyArgs.m_linkVisualShapeUniqueIds[urdfIndex]>=0)
 		{
-			const InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[linkIndex]);
+			const InternalVisualShapeHandle* visHandle = m_data->m_userVisualShapeHandles.getHandle(m_createBodyArgs.m_linkVisualShapeUniqueIds[urdfIndex]);
 			if (visHandle)
 			{
 				for (int i=0;i<visHandle->m_visualShapes.size();i++)
@@ -2602,7 +2602,7 @@ bool PhysicsServerCommandProcessor::processImportedObjects(const char* fileName,
 			bodyHandle->m_bodyName = u2b.getBodyName();
             btVector3 localInertiaDiagonal(0,0,0);
             int urdfLinkIndex = u2b.getRootLinkIndex();
-            u2b.getMassAndInertia(urdfLinkIndex, mass,localInertiaDiagonal,bodyHandle->m_rootLocalInertialFrame);
+            u2b.getMassAndInertia2(urdfLinkIndex, mass,localInertiaDiagonal,bodyHandle->m_rootLocalInertialFrame,flags);
         }
 
 
@@ -2664,7 +2664,7 @@ bool PhysicsServerCommandProcessor::processImportedObjects(const char* fileName,
 				btScalar mass;
                 btVector3 localInertiaDiagonal(0,0,0);
                 btTransform localInertialFrame;
-				u2b.getMassAndInertia(urdfLinkIndex, mass,localInertiaDiagonal,localInertialFrame);
+				u2b.getMassAndInertia2(urdfLinkIndex, mass,localInertiaDiagonal,localInertialFrame, flags);
 				bodyHandle->m_linkLocalInertialFrames.push_back(localInertialFrame);
 
 				std::string* linkName = new std::string(u2b.getLinkName(urdfLinkIndex).c_str());
@@ -4794,6 +4794,9 @@ bool PhysicsServerCommandProcessor::processSendDesiredStateCommand(const struct 
 								}
 								if (hasDesiredVelocity)
 								{
+									//disable velocity clamp in velocity mode
+									motor->setRhsClamp(SIMD_INFINITY);
+									
 									btScalar maxImp = 1000000.f*m_data->m_physicsDeltaTime;
 									if ((clientCmd.m_sendDesiredStateCommandArgument.m_hasDesiredStateFlags[dofIndex]&SIM_DESIRED_STATE_HAS_MAX_FORCE)!=0)
 									{
@@ -5007,9 +5010,7 @@ bool PhysicsServerCommandProcessor::processSendDesiredStateCommand(const struct 
 													{
 														con->enableMotor(3+limitAxis,true);
 														con->setTargetVelocity(3+limitAxis, qdotTarget);
-														//this is max motor force impulse
-														btScalar torqueImpulse = torque*m_data->m_dynamicsWorld->getSolverInfo().m_timeStep;
-														con->setMaxMotorForce(3+limitAxis,torqueImpulse);
+														con->setMaxMotorForce(3+limitAxis, torque);
 													}
 													break;
 												}
@@ -5022,9 +5023,7 @@ bool PhysicsServerCommandProcessor::processSendDesiredStateCommand(const struct 
 														//next one is the maximum velocity to reach target position.
 														//the maximum velocity is limited by maxMotorForce
 														con->setTargetVelocity(3+limitAxis, 100);
-														//this is max motor force impulse
-														btScalar torqueImpulse = torque*m_data->m_dynamicsWorld->getSolverInfo().m_timeStep;
-														con->setMaxMotorForce(3+limitAxis,torqueImpulse);
+														con->setMaxMotorForce(3+limitAxis, torque);
 														con->enableMotor(3+limitAxis,true);
 													}
 													break;
@@ -5060,9 +5059,7 @@ bool PhysicsServerCommandProcessor::processSendDesiredStateCommand(const struct 
 												{
 													con->enableMotor(limitAxis,true);
 													con->setTargetVelocity(limitAxis, -qdotTarget);
-													//this is max motor force impulse
-													btScalar torqueImpulse = torque*m_data->m_dynamicsWorld->getSolverInfo().m_timeStep;
-													con->setMaxMotorForce(limitAxis,torqueImpulse);
+													con->setMaxMotorForce(limitAxis, torque);
 													break;
 												}
 											case CONTROL_MODE_POSITION_VELOCITY_PD:
@@ -5072,9 +5069,7 @@ bool PhysicsServerCommandProcessor::processSendDesiredStateCommand(const struct 
 													//next one is the maximum velocity to reach target position.
 													//the maximum velocity is limited by maxMotorForce
 													con->setTargetVelocity(limitAxis, 100);
-													//this is max motor force impulse
-													btScalar torqueImpulse = torque*m_data->m_dynamicsWorld->getSolverInfo().m_timeStep;
-													con->setMaxMotorForce(limitAxis,torqueImpulse);
+													con->setMaxMotorForce(limitAxis, torque);
 													con->enableMotor(limitAxis,true);
 													break;
 												}
@@ -9699,6 +9694,12 @@ void PhysicsServerCommandProcessor::resetSimulation()
 {
 	//clean up all data
 
+#ifndef SKIP_SOFT_BODY_MULTI_BODY_DYNAMICS_WORLD
+	if (m_data && m_data->m_dynamicsWorld)
+	{
+		m_data->m_dynamicsWorld->getWorldInfo().m_sparsesdf.Reset();
+	}
+#endif
 	if (m_data && m_data->m_guiHelper)
 	{
 		m_data->m_guiHelper->removeAllGraphicsInstances();

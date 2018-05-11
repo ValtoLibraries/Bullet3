@@ -1,11 +1,17 @@
 """This file implements the gym environment of minitaur alternating legs.
 
 """
+
+import os,  inspect
+currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+parentdir = os.path.dirname(os.path.dirname(currentdir))
+os.sys.path.insert(0,parentdir)
+
 import collections
 import math
 from gym import spaces
 import numpy as np
-import minitaur_gym_env
+from pybullet_envs.minitaur.envs import minitaur_gym_env
 
 INIT_EXTENSION_POS = 2.0
 INIT_SWING_POS = 0.0
@@ -138,9 +144,9 @@ class MinitaurReactiveEnv(minitaur_gym_env.MinitaurGymEnv):
   def _convert_from_leg_model(self, leg_pose):
     motor_pose = np.zeros(NUM_MOTORS)
     for i in range(NUM_LEGS):
-      motor_pose[2 * i] = leg_pose[NUM_LEGS + i] - (-1)**(i / 2) * leg_pose[i]
-      motor_pose[2 * i + 1] = (
-          leg_pose[NUM_LEGS + i] + (-1)**(i / 2) * leg_pose[i])
+      motor_pose[int(2 * i)] = leg_pose[NUM_LEGS + i] - (-1)**int(i / 2) * leg_pose[i]
+      motor_pose[int(2 * i + 1)] = (
+          leg_pose[NUM_LEGS + i] + (-1)**int(i / 2) * leg_pose[i])
     return motor_pose
 
   def _signal(self, t):
