@@ -140,7 +140,7 @@ public:
             {
                 m_robotSim.loadURDF("plane.urdf");
             }
-            m_robotSim.setGravity(b3MakeVector3(0,0,-10));
+            m_robotSim.setGravity(btVector3(0,0,-10));
             m_robotSim.setNumSimulationSubSteps(4);
         }
 
@@ -181,7 +181,7 @@ public:
                 m_robotSim.loadURDF("plane.urdf");
                 
             }
-            m_robotSim.setGravity(b3MakeVector3(0,0,-10));
+            m_robotSim.setGravity(btVector3(0,0,-10));
             m_robotSim.setNumSimulationSubSteps(4);
         }
         
@@ -241,7 +241,7 @@ public:
             {
                 m_robotSim.loadURDF("plane.urdf");
             }
-            m_robotSim.setGravity(b3MakeVector3(0,0,-10));
+            m_robotSim.setGravity(btVector3(0,0,-10));
             
             b3JointInfo revoluteJoint1;
             revoluteJoint1.m_parentFrame[0] = -0.055;
@@ -335,7 +335,7 @@ public:
                 m_robotSim.loadURDF("plane.urdf", args);
                 
             }
-            m_robotSim.setGravity(b3MakeVector3(0,0,-10));
+            m_robotSim.setGravity(btVector3(0,0,-10));
             m_robotSim.loadSoftBody("bunny.obj",0.1,0.1,0.02);
             
             b3JointInfo revoluteJoint1;
@@ -411,7 +411,7 @@ public:
                 args.m_useMultiBody = false;
                 m_robotSim.loadURDF("plane.urdf", args);
             }
-            m_robotSim.setGravity(b3MakeVector3(0,0,-10));
+            m_robotSim.setGravity(btVector3(0,0,-10));
             m_robotSim.loadSoftBody("bunny.obj",0.3,10.0,0.1);
         }
     }
@@ -502,7 +502,10 @@ public:
 				}
 				// compute body position and orientation
 				b3LinkState linkState;
-				m_robotSim.getLinkState(0, 6, &linkState);
+				bool computeVelocity=true;
+				bool computeForwardKinematics=true;
+				m_robotSim.getLinkState(0, 6, computeVelocity,computeForwardKinematics, &linkState);
+				
 				
 				m_worldPos.setValue(linkState.m_worldLinkFramePosition[0], linkState.m_worldLinkFramePosition[1], linkState.m_worldLinkFramePosition[2]);
 				m_worldOri.setValue(linkState.m_worldLinkFrameOrientation[0], linkState.m_worldLinkFrameOrientation[1], linkState.m_worldLinkFrameOrientation[2], linkState.m_worldLinkFrameOrientation[3]);

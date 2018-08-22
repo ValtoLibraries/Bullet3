@@ -4,8 +4,14 @@
 #define SHARED_MEMORY_KEY 12347
 ///increase the SHARED_MEMORY_MAGIC_NUMBER whenever incompatible changes are made in the structures
 ///my convention is year/month/day/rev
+//Please don't replace an existing magic number:
+//instead, only ADD a new one at the top, comment-out previous one
 
-#define SHARED_MEMORY_MAGIC_NUMBER 201801170
+#define SHARED_MEMORY_MAGIC_NUMBER 201809010
+//#define SHARED_MEMORY_MAGIC_NUMBER 201807040
+//#define SHARED_MEMORY_MAGIC_NUMBER 201806150
+//#define SHARED_MEMORY_MAGIC_NUMBER 201806020
+//#define SHARED_MEMORY_MAGIC_NUMBER 201801170
 //#define SHARED_MEMORY_MAGIC_NUMBER 201801080
 //#define SHARED_MEMORY_MAGIC_NUMBER 201801010
 //#define SHARED_MEMORY_MAGIC_NUMBER 201710180
@@ -15,6 +21,7 @@
 //#define SHARED_MEMORY_MAGIC_NUMBER 201706015
 //#define SHARED_MEMORY_MAGIC_NUMBER 201706001
 //#define SHARED_MEMORY_MAGIC_NUMBER 201703024
+
 
 
 enum EnumSharedMemoryClientCommand
@@ -83,9 +90,14 @@ enum EnumSharedMemoryClientCommand
 	CMD_SAVE_STATE,
 	CMD_RESTORE_STATE,
 	CMD_REQUEST_COLLISION_SHAPE_INFO,
+
+	CMD_SYNC_USER_DATA,
+	CMD_REQUEST_USER_DATA,
+	CMD_ADD_USER_DATA,
+	CMD_REMOVE_USER_DATA,
+
     //don't go beyond this command!
     CMD_MAX_CLIENT_COMMANDS,
-    
 };
 
 enum EnumSharedMemoryServerStatus
@@ -192,6 +204,15 @@ enum EnumSharedMemoryServerStatus
 		CMD_COLLISION_SHAPE_INFO_FAILED,
 		CMD_LOAD_SOFT_BODY_FAILED,
 		CMD_LOAD_SOFT_BODY_COMPLETED,
+
+		CMD_SYNC_USER_DATA_COMPLETED,
+		CMD_SYNC_USER_DATA_FAILED,
+		CMD_REQUEST_USER_DATA_COMPLETED,
+		CMD_REQUEST_USER_DATA_FAILED,
+		CMD_ADD_USER_DATA_COMPLETED,
+		CMD_ADD_USER_DATA_FAILED,
+		CMD_REMOVE_USER_DATA_COMPLETED,
+		CMD_REMOVE_USER_DATA_FAILED,
 		//don't go beyond 'CMD_MAX_SERVER_COMMANDS!
         CMD_MAX_SERVER_COMMANDS
 };
@@ -254,6 +275,20 @@ struct b3JointInfo
 };
 
 
+enum UserDataValueType {
+	// Data represents generic byte array.
+	USER_DATA_VALUE_TYPE_BYTES = 0,
+	// Data represents C-string
+	USER_DATA_VALUE_TYPE_STRING = 1,
+};
+
+struct b3UserDataValue 
+{
+	int m_type;
+	int m_length;
+	char* m_data1;
+};
+
 struct b3UserConstraint
 {
     int m_parentBodyIndex;
@@ -276,6 +311,15 @@ struct b3BodyInfo
 {
 	char m_baseName[1024];
 	char m_bodyName[1024]; // for btRigidBody, it does not have a base, but can still have a body name from urdf
+};
+
+
+enum DynamicsActivationState
+{
+	eActivationStateEnableSleeping = 1,
+	eActivationStateDisableSleeping = 2,
+	eActivationStateWakeUp = 4,
+	eActivationStateSleep = 8,
 };
 
 struct b3DynamicsInfo
@@ -372,8 +416,7 @@ enum b3VREventType
 #define MAX_VR_BUTTONS 64
 #define MAX_VR_CONTROLLERS 8
 
-#define MAX_RAY_INTERSECTION_BATCH_SIZE 256
-#define MAX_RAY_HITS MAX_RAY_INTERSECTION_BATCH_SIZE
+
 #define MAX_KEYBOARD_EVENTS 256
 #define MAX_MOUSE_EVENTS 256
 
@@ -458,6 +501,62 @@ struct b3MouseEventsData
 	struct b3MouseEvent* m_mouseEvents;
 };
 
+enum b3NotificationType {
+	SIMULATION_RESET = 0,
+	BODY_ADDED = 1,
+	BODY_REMOVED = 2,
+	USER_DATA_ADDED = 3,
+	USER_DATA_REMOVED = 4,
+	LINK_DYNAMICS_CHANGED = 5,
+	VISUAL_SHAPE_CHANGED = 6,
+	TRANSFORM_CHANGED = 7,
+	SIMULATION_STEPPED = 8,
+};
+
+struct b3BodyNotificationArgs
+{
+	int m_bodyUniqueId;
+};
+
+struct b3UserDataNotificationArgs
+{
+	int m_userDataId;
+};
+
+struct b3LinkNotificationArgs
+{
+	int m_bodyUniqueId;
+	int m_linkIndex;
+};
+
+struct b3VisualShapeNotificationArgs
+{
+	int m_bodyUniqueId;
+	int m_linkIndex;
+	int m_visualShapeIndex;
+};
+
+struct b3TransformChangeNotificationArgs
+{
+	int m_bodyUniqueId;
+	int m_linkIndex;
+	double m_worldPosition[3];
+	double m_worldRotation[4];
+	double m_localScaling[3];
+};
+
+struct b3Notification
+{
+	int m_notificationType;
+	union {
+		struct b3BodyNotificationArgs m_bodyArgs;
+		struct b3UserDataNotificationArgs m_userDataArgs;
+		struct b3LinkNotificationArgs m_linkArgs;
+		struct b3VisualShapeNotificationArgs m_visualShapeArgs;
+		struct b3TransformChangeNotificationArgs m_transformChangeArgs;
+	};
+};
+
 struct b3ContactPointData
 {
 //todo: expose some contact flags, such as telling which fields below are valid
@@ -497,6 +596,9 @@ enum  b3StateLoggingType
 	STATE_LOGGING_COMMANDS = 4,
 	STATE_LOGGING_CONTACT_POINTS = 5,
 	STATE_LOGGING_PROFILE_TIMINGS = 6,
+	STATE_LOGGING_ALL_COMMANDS=7,
+	STATE_REPLAY_ALL_COMMANDS=8,
+	STATE_LOGGING_CUSTOM_TIMER=9,
 };
 
 
@@ -504,6 +606,12 @@ struct b3ContactInformation
 {
 	int m_numContactPoints;
 	struct b3ContactPointData* m_contactPointData;
+};
+
+struct b3RayData
+{
+  double m_rayFromPosition[3];
+  double m_rayToPosition[3];
 };
 
 struct b3RayHitInfo
@@ -521,8 +629,27 @@ struct b3RaycastInformation
 	struct b3RayHitInfo* m_rayHits;
 };
 
+typedef union {
+    struct b3RayData a;
+    struct b3RayHitInfo b;
+} RAY_DATA_UNION;
 
+
+#define MAX_RAY_INTERSECTION_BATCH_SIZE 256
+
+#ifdef __APPLE__
+#define MAX_RAY_INTERSECTION_BATCH_SIZE_STREAMING (4*1024)
+#else
+#define MAX_RAY_INTERSECTION_BATCH_SIZE_STREAMING (16*1024)
+#endif
+
+#define MAX_RAY_HITS MAX_RAY_INTERSECTION_BATCH_SIZE
 #define VISUAL_SHAPE_MAX_PATH_LEN 1024
+
+enum b3VisualShapeDataFlags
+{
+	eVISUAL_SHAPE_DATA_TEXTURE_UNIQUE_IDS = 1,
+};
 
 struct b3VisualShapeData
 {
@@ -534,6 +661,10 @@ struct b3VisualShapeData
     double m_localVisualFrame[7];//pos[3], orn[4]
 	//todo: add more data if necessary (material color etc, although material can be in asset file .obj file)
     double m_rgbaColor[4];
+    int m_tinyRendererTextureId;
+    int m_textureUniqueId;
+    int m_openglTextureId;
+    
 };
 
 struct b3VisualShapeInformation
@@ -596,6 +727,7 @@ enum {
     CONTROL_MODE_VELOCITY=0,
     CONTROL_MODE_TORQUE,
     CONTROL_MODE_POSITION_VELOCITY_PD,
+    CONTROL_MODE_PD, // The standard PD control implemented as soft constraint.
 };
 
 ///flags for b3ApplyExternalTorque and b3ApplyExternalForce
@@ -628,7 +760,9 @@ enum EnumCalculateInverseKinematicsFlags
 	IK_HAS_TARGET_ORIENTATION=32,
 	IK_HAS_NULL_SPACE_VELOCITY=64,
 	IK_HAS_JOINT_DAMPING=128,
-	//IK_HAS_CURRENT_JOINT_POSITIONS=256,//not used yet
+	IK_HAS_CURRENT_JOINT_POSITIONS=256,
+	IK_HAS_MAX_ITERATIONS=512,
+	IK_HAS_RESIDUAL_THRESHOLD = 1024,
 };
 
 enum b3ConfigureDebugVisualizerEnum
@@ -669,6 +803,8 @@ enum eCONNECT_METHOD {
   eCONNECT_GUI_SERVER=7,
   eCONNECT_GUI_MAIN_THREAD=8,
   eCONNECT_SHARED_MEMORY_SERVER=9,
+  eCONNECT_DART=10,
+  eCONNECT_MUJOCO=11,
 };
 
 enum eURDF_Flags
@@ -682,6 +818,8 @@ enum eURDF_Flags
 	URDF_GLOBAL_VELOCITIES_MB =256,
 	MJCF_COLORS_FROM_FILE=512,
 	URDF_ENABLE_CACHED_GRAPHICS_SHAPES=1024,
+    URDF_ENABLE_SLEEPING=2048,
+	URDF_INITIALIZE_SAT_FEATURES = 4096,
 };
 
 enum eUrdfGeomTypes //sync with UrdfParser UrdfGeomTypes
@@ -758,6 +896,7 @@ struct b3PhysicsSimulationParameters
 	int m_jointFeedbackMode;
 	double m_solverResidualThreshold;
 	double m_contactSlop;
+	int m_enableSAT;
 };
 
 

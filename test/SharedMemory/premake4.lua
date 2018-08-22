@@ -170,6 +170,11 @@ project ("Test_PhysicsServerLoopBack")
 			
 		files {
 			"test.c",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.h",
+			"../../examples/SharedMemory/plugins/collisionFilterPlugin/collisionFilterPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.h",
 			"../../examples/SharedMemory/IKTrajectoryHelper.cpp",
 			"../../examples/SharedMemory/IKTrajectoryHelper.h",
 			"../../examples/SharedMemory/PhysicsClient.cpp",
@@ -186,6 +191,8 @@ project ("Test_PhysicsServerLoopBack")
 			"../../examples/SharedMemory/PhysicsLoopBack.h",
 			"../../examples/SharedMemory/PhysicsLoopBackC_API.cpp",
 			"../../examples/SharedMemory/PhysicsLoopBackC_API.h",
+			"../../examples/SharedMemory/PhysicsClientSharedMemory_C_API.cpp",
+			"../../examples/SharedMemory/PhysicsClientSharedMemory_C_API.h",
 			"../../examples/SharedMemory/PhysicsClientSharedMemory.cpp",
 			"../../examples/SharedMemory/PhysicsClientSharedMemory.h",
 			"../../examples/SharedMemory/PhysicsClientC_API.cpp",
@@ -224,7 +231,7 @@ project ("Test_PhysicsServerLoopBack")
 			"../../examples/Importers/ImportURDFDemo/UrdfParser.cpp",
 			"../../examples/Importers/ImportURDFDemo/urdfStringSplit.cpp",
 			"../../examples/Importers/ImportMeshUtility/b3ImportMeshUtility.cpp",
-                        "../../examples/ThirdPartyLibs/stb_image/stb_image.cpp",
+			"../../examples/ThirdPartyLibs/stb_image/stb_image.cpp",
 	}
 	
 if (_OPTIONS["enable_static_plugins"]) then
@@ -256,6 +263,11 @@ end
 			
 		files {
 			"test.c",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.h",
+			"../../examples/SharedMemory/plugins/collisionFilterPlugin/collisionFilterPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.h",
 			"../../examples/SharedMemory/IKTrajectoryHelper.cpp",
 			"../../examples/SharedMemory/IKTrajectoryHelper.h",
 			"../../examples/SharedMemory/PhysicsClient.cpp",
@@ -360,6 +372,11 @@ project ("Test_PhysicsServerInProcessExampleBrowser")
 
 		files {
 			"test.c",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp",
+			"../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.h",
+			"../../examples/SharedMemory/plugins/collisionFilterPlugin/collisionFilterPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.cpp",
+			"../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.h",
 			"../../examples/SharedMemory/IKTrajectoryHelper.cpp",
 			"../../examples/SharedMemory/IKTrajectoryHelper.h",
 			"../../examples/ExampleBrowser/InProcessExampleBrowser.cpp",

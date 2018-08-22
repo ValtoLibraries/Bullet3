@@ -36,6 +36,8 @@
 #define MAX_SDF_FILENAME_LENGTH 1024
 #define MAX_FILENAME_LENGTH MAX_URDF_FILENAME_LENGTH
 #define MAX_NUM_LINKS MAX_DEGREE_OF_FREEDOM
+#define MAX_USER_DATA_KEY_LENGTH MAX_URDF_FILENAME_LENGTH
+
 
 struct TmpFloat3 
 {
@@ -165,6 +167,7 @@ enum EnumChangeDynamicsInfoFlags
 	CHANGE_DYNAMICS_INFO_SET_LOCAL_INERTIA_DIAGONAL = 1024,
 	CHANGE_DYNAMICS_INFO_SET_CCD_SWEPT_SPHERE_RADIUS = 2048,
 	CHANGE_DYNAMICS_INFO_SET_CONTACT_PROCESSING_THRESHOLD = 4096,
+	CHANGE_DYNAMICS_INFO_SET_ACTIVATION_STATE = 8192,
 };
 
 struct ChangeDynamicsInfoArgs
@@ -185,6 +188,7 @@ struct ChangeDynamicsInfoArgs
 	int m_frictionAnchor;
 	double m_ccdSweptSphereRadius;
 	double m_contactProcessingThreshold;
+	int m_activationState;
 };
 
 struct GetDynamicsInfoArgs
@@ -278,15 +282,23 @@ enum EnumRequestContactDataUpdateFlags
 
 struct RequestRaycastIntersections
 {
-	int m_numRays;
-	double m_rayFromPositions[MAX_RAY_INTERSECTION_BATCH_SIZE][3];
-	double m_rayToPositions[MAX_RAY_INTERSECTION_BATCH_SIZE][3];
+	// The number of threads that Bullet may use to perform the ray casts.
+	// 0: Let Bullet decide
+	// 1: Use a single thread (i.e. no multi-threading)
+	// 2 or more: Number of threads to use.
+	int m_numThreads;
+	int m_numCommandRays;
+	//m_numCommandRays command rays are stored in m_fromToRays
+	b3RayData m_fromToRays[MAX_RAY_INTERSECTION_BATCH_SIZE];
+		
+	int m_numStreamingRays;
+	//streaming ray data stored in shared memory streaming part. (size m_numStreamingRays )
 };
 
 struct SendRaycastHits
 {
 	int m_numRaycastHits;
-	b3RayHitInfo m_rayHits[MAX_RAY_INTERSECTION_BATCH_SIZE];
+	// Actual ray result data stored in shared memory streaming part.
 };
 
 struct RequestContactDataArgs
@@ -454,6 +466,7 @@ enum EnumSimParamUpdateFlags
 	SIM_PARAM_UPDATE_DEFAULT_FRICTION_CFM = 1048576,
 	SIM_PARAM_UPDATE_SOLVER_RESIDULAL_THRESHOLD = 2097152,
 	SIM_PARAM_UPDATE_CONTACT_SLOP = 4194304,
+	SIM_PARAM_ENABLE_SAT = 8388608,
 };
 
 enum EnumLoadSoftBodyUpdateFlags
@@ -695,6 +708,9 @@ struct CalculateInverseKinematicsArgs
     double m_jointRange[MAX_DEGREE_OF_FREEDOM];
     double m_restPose[MAX_DEGREE_OF_FREEDOM];
     double m_jointDamping[MAX_DEGREE_OF_FREEDOM];
+	double m_currentPositions[MAX_DEGREE_OF_FREEDOM];
+	int m_maxNumIterations;
+	double m_residualThreshold;
 };
 
 struct CalculateInverseKinematicsResultArgs
@@ -923,6 +939,7 @@ enum eCreateMultiBodyEnum
 {
 	MULTI_BODY_HAS_BASE=1,
 	MULT_BODY_USE_MAXIMAL_COORDINATES=2,
+	MULT_BODY_HAS_FLAGS=4,
 };
 struct b3CreateMultiBodyArgs
 {
@@ -944,7 +961,7 @@ struct b3CreateMultiBodyArgs
 	int m_linkParentIndices[MAX_CREATE_MULTI_BODY_LINKS];
 	int m_linkJointTypes[MAX_CREATE_MULTI_BODY_LINKS];
 	double m_linkJointAxis[3*MAX_CREATE_MULTI_BODY_LINKS];
-
+	int m_flags;
 	#if 0
 	std::string m_name;
 	std::string m_sourceFile;
@@ -973,11 +990,46 @@ struct b3StateSerializationArguments
 	int m_stateId;
 };
 
+struct SyncUserDataArgs
+{
+	// User data identifiers stored in m_bulletStreamDataServerToClientRefactor
+	// as as array of integers.
+	int m_numUserDataIdentifiers;
+};
+
+struct UserDataRequestArgs {
+  int m_userDataId;
+};
+
+struct UserDataResponseArgs
+{
+	int m_userDataId;
+	int m_bodyUniqueId;
+	int m_linkIndex;
+	int m_visualShapeIndex;
+	int m_valueType;
+	int m_valueLength;
+	char m_key[MAX_USER_DATA_KEY_LENGTH];
+	// Value data stored in m_bulletStreamDataServerToClientRefactor.
+};
+
+struct AddUserDataRequestArgs
+{
+	int m_bodyUniqueId;
+	int m_linkIndex;
+	int m_visualShapeIndex;
+	int m_valueType;
+	int m_valueLength;
+	char m_key[MAX_USER_DATA_KEY_LENGTH];
+	// Value data stored in m_bulletStreamDataServerToClientRefactor.
+};
+
 struct SharedMemoryCommand
 {
 	int m_type;
 	smUint64_t	m_timeStamp;
 	int	m_sequenceNumber;
+	
 	
 	//m_updateFlags is a bit fields to tell which parameters need updating
     //for example m_updateFlags = SIM_PARAM_UPDATE_DELTA_TIME | SIM_PARAM_UPDATE_NUM_SOLVER_ITERATIONS;
@@ -1029,6 +1081,9 @@ struct SharedMemoryCommand
 		struct b3CustomCommand m_customCommandArgs;
 		struct b3StateSerializationArguments m_loadStateArguments;
 		struct RequestCollisionShapeDataArgs m_requestCollisionShapeDataArguments;		
+		struct UserDataRequestArgs m_userDataRequestArgs;
+		struct AddUserDataRequestArgs m_addUserDataRequestArgs;
+		struct UserDataRequestArgs m_removeUserDataRequestArgs;
     };
 };
 
@@ -1050,11 +1105,6 @@ struct SendOverlappingObjectsArgs
 	int m_numOverlappingObjectsCopied;
 	int m_numRemainingOverlappingObjects;
 };
-
-
-
-
-
 
 struct SharedMemoryStatus
 {
@@ -1106,6 +1156,9 @@ struct SharedMemoryStatus
 		struct b3StateSerializationArguments m_saveStateResultArgs;
 		struct b3LoadSoftBodyResultArgs m_loadSoftBodyResultArguments;
 		struct SendCollisionShapeDataArgs m_sendCollisionShapeArgs;
+		struct SyncUserDataArgs m_syncUserDataArgs;
+		struct UserDataResponseArgs m_userDataResponseArgs;
+		struct UserDataRequestArgs m_removeUserDataResponseArgs;
 	};
 };
 

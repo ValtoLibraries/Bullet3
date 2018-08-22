@@ -15,6 +15,11 @@ ENDIF()
 
 SET(pybullet_SRCS
 	pybullet.c
+		../../examples/SharedMemory/plugins/collisionFilterPlugin/collisionFilterPlugin.cpp
+		../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.cpp
+		../../examples/SharedMemory/plugins/pdControlPlugin/pdControlPlugin.h
+		../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.cpp
+		../../examples/SharedMemory/b3RobotSimulatorClientAPI_NoDirect.h
 		../../examples/SharedMemory/IKTrajectoryHelper.cpp
 		../../examples/SharedMemory/IKTrajectoryHelper.h
 		../../examples/ExampleBrowser/InProcessExampleBrowser.cpp
